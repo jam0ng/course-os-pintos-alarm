@@ -66,9 +66,12 @@ timer_calibrate (void)
   printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
 }
 
-/* Returns the number of timer ticks since the OS booted. */
-int64_t
-timer_ticks (void) 
+/*
+  int64_t timer_ticks
+  현재까지 경과된 ticks 수를 반환합니다.
+  스레드의 wake_tick 계산 및 남은 시간 측정에 사용됩니다.
+*/
+int64_t timer_ticks (void) 
 {
   enum intr_level old_level = intr_disable ();
   int64_t t = ticks;
@@ -76,18 +79,23 @@ timer_ticks (void)
   return t;
 }
 
-/* Returns the number of timer ticks elapsed since THEN, which
-   should be a value once returned by timer_ticks(). */
-int64_t
-timer_elapsed (int64_t then) 
+/*
+  int64_t timer_elapsed
+  then 시점부터 지금까지 흐른 tick 수를 반환합니다.
+  주로 timer_sleep 내부의 조건 검사에 활용됩니다.
+*/
+int64_t timer_elapsed (int64_t then) 
 {
   return timer_ticks () - then;
 }
 
-/* Sleeps for approximately TICKS timer ticks.  Interrupts must
-   be turned on. */
-void
-timer_sleep (int64_t ticks) 
+/* 
+  void timer_sleep
+  스레드를 주어진 ticks 동안 재웁니다.
+  현재는 busy-wait 방식으로 구현되어 CPU 낭비가 심합니다.
+  과제에서는 이 함수를 수정하여 sleep list에 현재 스레드를 삽입하고 thread_block()을 호출해야 합니다.
+*/
+void timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
 
@@ -166,9 +174,14 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
-static void
-timer_interrupt (struct intr_frame *args UNUSED)
+
+/*
+  static void timer_interrupt
+  하드웨어 타이머 인터럽트가 발생할 때마다 호출됩니다.
+  ticks를 증가시키고, thread_tick()으로 스케줄러를 알립니다.
+  과제에서는 여기에 sleep list를 순회하여 wake_tick이 된 스레드를 thread_unblock()으로 깨우는 로직을 추가해야 합니다.
+*/
+static void timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
@@ -207,9 +220,11 @@ busy_wait (int64_t loops)
     barrier ();
 }
 
-/* Sleep for approximately NUM/DENOM seconds. */
-static void
-real_time_sleep (int64_t num, int32_t denom) 
+/*
+  static void real_time_sleep
+  밀리초(ms), 마이크로초(us), 나노초(ns) 단위의 sleep 요청을 tick 단위로 변환하여 timer_sleep을 호출하거나, 매우 짧은 시간인 경우 busy-wait 방식으로 대체합니다.
+*/
+static void real_time_sleep (int64_t num, int32_t denom) 
 {
   /* Convert NUM/DENOM seconds into timer ticks, rounding down.
           
