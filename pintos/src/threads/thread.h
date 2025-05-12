@@ -80,26 +80,28 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+   
+   // struct thread에 wake_tick 추가 (스레드별 깨울 시점)
 struct thread
   {
     /* Owned by thread.c. */
-    tid_t tid;                          /* Thread identifier. */
-    enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
-    uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
-    struct list_elem allelem;           /* List element for all threads list. */
+    tid_t tid;                          // 스레드 고유 식별자 (TID), 시스템 내 유일한 ID이다.
+    enum thread_status status;          // 현재 스레드의 상태 (e.g., RUNNING, READY, BLOCKED, DYING).
+    char name[16];                      // 스레드의 이름, 디버깅 용도로 사용. 최대 15자 + NULL 문자.
+    uint8_t *stack;                     // 커널 스택 포인터. 스레드 구조체 바로 위에 존재하는 커널 스택을 가리킴.
+    int priority;                       // 스레드의 우선순위 값. 기본 스케줄링 또는 MLFQS에서 사용됨.
+    struct list_elem allelem;           // all_list에 삽입될 때 사용하는 리스트 요소 (모든 스레드를 위한 리스트).
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
+    struct list_elem elem;              // ready_list나 semaphore 대기 리스트 등 다양한 큐에 사용되는 요소.
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t *pagedir;                  // 사용자 프로세스일 경우 페이지 디렉터리 포인터.
 #endif
 
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
+    unsigned magic;                     // 스택 오버플로우 검출용 매직 넘버. 이 값이 손상되면 에러로 감지됨.
   };
 
 /* If false (default), use round-robin scheduler.
