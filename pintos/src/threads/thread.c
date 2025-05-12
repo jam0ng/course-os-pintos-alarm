@@ -148,24 +148,13 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
-/* Creates a new kernel thread named NAME with the given initial
-   PRIORITY, which executes FUNCTION passing AUX as the argument,
-   and adds it to the ready queue.  Returns the thread identifier
-   for the new thread, or TID_ERROR if creation fails.
-
-   If thread_start() has been called, then the new thread may be
-   scheduled before thread_create() returns.  It could even exit
-   before thread_create() returns.  Contrariwise, the original
-   thread may run for any amount of time before the new thread is
-   scheduled.  Use a semaphore or some other form of
-   synchronization if you need to ensure ordering.
-
-   The code provided sets the new thread's `priority' member to
-   PRIORITY, but no actual priority scheduling is implemented.
-   Priority scheduling is the goal of Problem 1-3. */
-tid_t
-thread_create (const char *name, int priority,
-               thread_func *function, void *aux) 
+/* 
+  tid_t thread_create
+  새로운 커널 스레드를 생성하고 초기화한 뒤 ready_list에 넣는다.
+  스레드 함수 실행을 위한 스택 프레임들을 설정하고, thread_unblock()으로 준비시킨다.
+  스레드 생성 이후 즉시 실행될 수도 있고, 큐에서 대기할 수도 있다.
+*/
+tid_t thread_create (const char *name, int priority, thread_func *function, void *aux) 
 {
   struct thread *t;
   struct kernel_thread_frame *kf;
@@ -205,14 +194,13 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-/* Puts the current thread to sleep.  It will not be scheduled
-   again until awoken by thread_unblock().
-
-   This function must be called with interrupts turned off.  It
-   is usually a better idea to use one of the synchronization
-   primitives in synch.h. */
-void
-thread_block (void) 
+/* 
+  void thread_block 
+  현재 실행 중인 스레드를 BLOCKED 상태로 전환하고, CPU를 양도한다.
+  BLOCKED 상태의 스레드는 외부에서 thread_unblock()으로 깨워야 다시 실행될 수 있다.
+  이 함수는 반드시 인터럽트가 꺼진 상태에서 호출되어야 하며, schedule()을 통해 context switch가 일어난다.
+*/
+void thread_block (void) 
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
@@ -221,16 +209,13 @@ thread_block (void)
   schedule ();
 }
 
-/* Transitions a blocked thread T to the ready-to-run state.
-   This is an error if T is not blocked.  (Use thread_yield() to
-   make the running thread ready.)
-
-   This function does not preempt the running thread.  This can
-   be important: if the caller had disabled interrupts itself,
-   it may expect that it can atomically unblock a thread and
-   update other data. */
-void
-thread_unblock (struct thread *t) 
+/* 
+  void thread_unblock
+  BLOCKED 상태의 스레드를 READY 상태로 전환시키고, ready_list에 삽입한다.
+  이렇게 하면 스레드가 이후 스케줄러에 의해 실행될 수 있게 된다.
+  주의: 이 함수는 호출 당시 스레드가 BLOCKED 상태임을 보장해야 하며, 현재 실행 중인 스레드를 preempt하지는 않는다.
+*/
+void thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
 
@@ -276,10 +261,13 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
-/* Deschedules the current thread and destroys it.  Never
-   returns to the caller. */
-void
-thread_exit (void) 
+/* 
+  void thread_exit
+  현재 스레드를 종료시키고 스케줄러에게 CPU를 양도한다.
+  all_list에서 제거되고, 상태를 DYING으로 설정한 후 schedule()을 호출한다.
+  이후 thread_schedule_tail()에서 해당 스레드의 메모리를 정리한다.
+*/
+void thread_exit (void) 
 {
   ASSERT (!intr_context ());
 
@@ -297,10 +285,13 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
-/* Yields the CPU.  The current thread is not put to sleep and
-   may be scheduled again immediately at the scheduler's whim. */
-void
-thread_yield (void) 
+/* 
+  void thread_yield
+  현재 스레드를 READY 상태로 바꾸고 ready_list에 다시 삽입한 뒤, 스케줄러에게 CPU를 양도한다.
+  스레드는 이후 다시 선택될 수 있다.
+  인터럽트가 켜진 상태에서 호출되어야 하며, idle_thread는 큐에 넣지 않는다.
+*/
+void thread_yield (void) 
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
@@ -419,7 +410,7 @@ idle (void *idle_started_ UNUSED)
 static void
 kernel_thread (thread_func *function, void *aux) 
 {
-  ASSERT (function != NULL);
+  ASSERT (function != NULL);  
 
   intr_enable ();       /* The scheduler runs with interrupts off. */
   function (aux);       /* Execute the thread function. */
@@ -483,13 +474,13 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-/* Chooses and returns the next thread to be scheduled.  Should
-   return a thread from the run queue, unless the run queue is
-   empty.  (If the running thread can continue running, then it
-   will be in the run queue.)  If the run queue is empty, return
-   idle_thread. */
-static struct thread *
-next_thread_to_run (void) 
+/* 
+  static struct thread * next_thread_to_run
+  ready_list에서 다음 실행할 스레드를 반환한다.
+  만약 ready_list가 비어 있다면, idle_thread를 반환하여 CPU가 놀지 않게 한다.
+  반납된 스레드는 바로 실행될 수 있는 상태여야 하며, ready_list는 FIFO 방식으로 관리된다.
+*/
+static struct thread * next_thread_to_run (void) 
 {
   if (list_empty (&ready_list))
     return idle_thread;
@@ -497,24 +488,13 @@ next_thread_to_run (void)
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
-/* Completes a thread switch by activating the new thread's page
-   tables, and, if the previous thread is dying, destroying it.
-
-   At this function's invocation, we just switched from thread
-   PREV, the new thread is already running, and interrupts are
-   still disabled.  This function is normally invoked by
-   thread_schedule() as its final action before returning, but
-   the first time a thread is scheduled it is called by
-   switch_entry() (see switch.S).
-
-   It's not safe to call printf() until the thread switch is
-   complete.  In practice that means that printf()s should be
-   added at the end of the function.
-
-   After this function and its caller returns, the thread switch
-   is complete. */
-void
-thread_schedule_tail (struct thread *prev)
+/* 
+  void thread_schedule_tail
+  스레드 전환이 완료된 직후 호출되는 후처리 함수다.
+  새로 전환된 스레드를 RUNNING 상태로 만들고, 이전 스레드가 DYING 상태라면 메모리를 해제한다.
+  첫 context switch에서도 호출되며, 사용자 프로세스의 주소 공간도 활성화한다.
+*/
+void thread_schedule_tail (struct thread *prev)
 {
   struct thread *cur = running_thread ();
   
@@ -543,15 +523,13 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
-/* Schedules a new process.  At entry, interrupts must be off and
-   the running process's state must have been changed from
-   running to some other state.  This function finds another
-   thread to run and switches to it.
-
-   It's not safe to call printf() until thread_schedule_tail()
-   has completed. */
-static void
-schedule (void) 
+/* 
+  static void schedule
+  현재 스레드의 상태가 BLOCKED, READY, DYING 중 하나가 되었을 때 호출된다.
+  ready_list에서 다음 실행할 스레드를 선택하고, switch_threads()를 통해 context switch를 수행한다.
+  반드시 인터럽트가 비활성화된 상태에서 호출되어야 하며, thread_schedule_tail()로 후처리가 이어진다.
+*/
+static void schedule (void) 
 {
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
