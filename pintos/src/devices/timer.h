@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 /* Number of timer interrupts per second. */
+// 건들지 말 것, 초당 타이머 틱 수를 나타내는데 기본값이 100 이거 수정하면 많은 테스트가 실패함.
 #define TIMER_FREQ 100
 
 void timer_init (void);

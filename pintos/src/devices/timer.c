@@ -97,8 +97,10 @@ int64_t timer_elapsed (int64_t then)
 */
 void timer_sleep (int64_t ticks) 
 {
+  // 수행을 지연을 시작한 시간
   int64_t start = timer_ticks ();
 
+  // CPU가 interrupt를 받을 수 있는지 확인
   ASSERT (intr_get_level () == INTR_ON);
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
