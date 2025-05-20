@@ -91,6 +91,9 @@ struct thread
     uint8_t *stack;                     // 커널 스택 포인터. 스레드 구조체 바로 위에 존재하는 커널 스택을 가리킴.
     int priority;                       // 스레드의 우선순위 값. 기본 스케줄링 또는 MLFQS에서 사용됨.
     struct list_elem allelem;           // all_list에 삽입될 때 사용하는 리스트 요소 (모든 스레드를 위한 리스트).
+    
+    // 일어날 시간을 담는 변수 (추가)
+    int64_t wake_tick;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              // ready_list나 semaphore 대기 리스트 등 다양한 큐에 사용되는 요소.
@@ -109,6 +112,11 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 extern bool thread_report_latency;
+
+int64_t get_next_tick_to_awake(void);
+void updata_next_tick_to_awake(int64_t ticks);
+void thread_sleep(int64_t ticks);
+void thread_awake(int64_t ticks);
 
 void thread_init (void);
 void thread_start (void);

@@ -30,6 +30,7 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -99,11 +100,19 @@ void timer_sleep (int64_t ticks)
 {
   // 수행을 지연을 시작한 시간
   int64_t start = timer_ticks ();
-
   // CPU가 interrupt를 받을 수 있는지 확인
   ASSERT (intr_get_level () == INTR_ON);
+
+  /*  
+  (수정전 코드)
+  
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
+  */
+ 
+  // 구현한 함수 호출
+  thread_sleep(start + ticks);
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -187,6 +196,9 @@ static void timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  if(get_next_tick_to_awake() <= ticks){
+    thread_awake(ticks);
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

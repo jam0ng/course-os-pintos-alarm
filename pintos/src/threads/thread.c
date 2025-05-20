@@ -28,6 +28,13 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+// block된 스레드 관리용 리스트(추가)
+static struct list sleeping_list;
+
+// 다음에 깨워질 가장 빠른 시간을 저장하는 변수(추가)
+static int64_t next_tick_to_awake;
+
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -72,6 +79,68 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+
+/* alram clock 개선용 함수 생성 공간 */
+
+int64_t get_next_tick_to_awake(void){
+  return next_tick_to_awake;
+}
+
+void updata_next_tick_to_awake(int64_t ticks)
+{
+  // 깨워야 할 스레드 중 가장 작은 tick을 갖도록 업데이트 함
+  next_tick_to_awake = (next_tick_to_awake > ticks) ? ticks : next_tick_to_awake;
+}
+
+void thread_sleep(int64_t ticks)
+{
+  struct thread* curr;
+
+  enum intr_level old_level;
+  old_level = intr_disable(); // 이 라인 이후의 과정에서는 인터럽트를 허용하지 않음
+  // 대신 나중에 다시 그 허용하기 위해 이전 정보를 old_level에 저장함
+
+  curr = thread_current(); // 현재의 thread 주소를 가져옴
+  ASSERT(curr != idle_thread);  // 현재의 thread가 idle_thread가 아니라면 아래 코드 진행 맞다면 종료,  ASSERT(인자); 인자가 참이면 진행 거짓이면 종료
+  
+  // 만약 thread_sleep 함수 인자로 주어진 ticks가 현재 시점보다 전이라면 어떻게 되는 것인가?
+  updata_next_tick_to_awake(curr-> wake_tick = ticks);  // 현재의 thread의 wake_tick에 인자로 들어온 ticks를 저장후 next_tick_to_awake를 업데이트 한다.
+  // sleeping_list에 현재 스레드의 elem을 맨 뒤에 삽입
+  list_push_back(&sleeping_list, &(curr -> elem));
+
+  thread_block(); // 현재 스레드를 block
+  
+  intr_set_level(old_level); // 다시 interrupt를 허용함 + 과저 정보 복구
+
+}
+
+/* list 안에 있는  ASSERT (list != NULL); 이 명령어는 NULL이라면 종료해라 라는 뜻이고, 포인터로 NULL 값을 받는 다면 문제가 생기기 때문에 그거 방지하기 위한 코드임 */
+
+void thread_awake(int64_t ticks)
+{
+  struct list_elem *eptr = list_begin(&sleeping_list); // sleeping_list의 head 다음 첫 노드의 주소를 eptr에 저장
+
+  while (eptr != list_end(&sleeping_list)){ // sleeping_list를 전부 순환할 때까지(tail 노드를 만날 때까지) while 문 반복
+    struct thread *tptr = list_entry(eptr, struct thread, elem); // elem* eptr를 포함하는 struct thread를 찾아 주소로 변환 
+    if (tptr-> wake_tick <= ticks){                              // 현재 ticks 보다 작거나 같은 wake_tick을 가지고 있는 thread를 찾는다면
+      eptr = list_remove(eptr);                                  // sleeping_list에서 삭제하고 다음 노드를 앞으로 당김
+      thread_unblock(tptr);                                      // thread unblock 하기
+    }   
+    else{
+      if (tptr -> wake_tick < next_tick_to_awake){
+        updata_next_tick_to_awake(tptr->wake_tick);   // 다음으로 올 수 있는 빠른 wake_tick을 next_tick_to_awake로 업데이트
+      }
+
+      eptr = list_next(eptr);                         // 현재 깨어날 thread가 아닌 thread를 넘김 
+    }
+  }
+
+}
+
+/*-----------------------------------------------------------------*/
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -93,6 +162,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  // block된 스레드 관리용 list를 초기화
+  list_init(&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
